@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Asynchronous Order Processing</title>
+</head>
+<body>
+    <h1>Asynchronous Order Processing</h1>
+	<form>
+      <input type="file" id="fileInput" name="fileInput">
+      <button type="button" id="uploadButton">Upload</button>
+    </form>
+	<div id="result"></div>
+    <script>
+        let eventSource = null;
+
+      const uploadButton = document.getElementById('uploadButton');
+      const fileInput = document.getElementById('fileInput');
+     // const endpoint = 'https://file-upload8.p.rapidapi.com/upload';
+      uploadButton.addEventListener('click',  () => {
+			processOrder();
+        });
+		
+		async function  processOrder() {
+			const file = fileInput.files[0];
+			const formData = new FormData();
+			formData.append('file', file);
+			
+				try {
+					const response = await fetch('http://localhost:8080/api/upload/csv', {
+						method: 'POST',
+						mode: 'cors',
+						body: formData
+					});
+
+					if (response.status === 202) {
+						document.getElementById('result').textContent = 'Order processing initiated. Waiting for completion...';
+						const transactionId = await response.text();
+						// Connect to the SSE endpoint for this order
+						const endpoint = 'http://localhost:8080/api/sse/'+transactionId;
+						const eventSource = new EventSource(endpoint);                    
+						eventSource.onmessage = (e) => {
+							document.getElementById('result').textContent = e.data;
+						};
+						eventSource.addEventListener("progress", (e) => {
+						  console.log(e.data);
+						  document.getElementById('result').textContent = e.data;
+						});
+						eventSource.addEventListener("complete", (e) => {
+						  console.log(e.data);
+						  document.getElementById('result').textContent = e.data;
+						  eventSource.close();
+						});
+						
+						eventSource.onerror = (error) => {
+							console.error('SSE Error:', error);
+							eventSource.close();
+
+						};
+					}
+				} catch (error) {
+					console.error('Error:', error);
+				}
+		}
+
+        function closeEventSource() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+        }
+
+        // Close the SSE connection when leaving the page
+        window.addEventListener('beforeunload', closeEventSource);
+    </script>
+</body>
+</html>
